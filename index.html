@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VN Crosswalk Trainer</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+  <div id="overlay-start" class="overlay visible">
+    <h1>VN Crosswalk Trainer</h1>
+    <p>Use WASD or Arrow keys to move. Reach the opposite sidewalk to win.</p>
+    <button id="btn-start">Start</button>
+  </div>
+
+  <div id="overlay-gameover" class="overlay">
+    <h1>Game Over</h1>
+    <button id="btn-restart">Restart</button>
+  </div>
+
+  <div id="overlay-clear" class="overlay">
+    <h1>Level Clear</h1>
+    <button id="btn-next">Play Again</button>
+  </div>
+
+  <div id="hud" class="hud">Cross the road to the opposite sidewalk</div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+
+</html>

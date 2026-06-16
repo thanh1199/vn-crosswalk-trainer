@@ -1,0 +1,49 @@
+/* Global styles for overlays and HUD */
+body,
+html {
+    margin: 0;
+    height: 100%;
+    font-family: Arial, sans-serif;
+    background: #333;
+}
+
+canvas {
+    display: block;
+}
+
+.overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.85);
+    color: #fff;
+    padding: 24px 32px;
+    border-radius: 8px;
+    text-align: center;
+    z-index: 10;
+    display: none;
+}
+
+.overlay.visible {
+    display: block;
+}
+
+.overlay button {
+    padding: 8px 16px;
+    font-size: 16px;
+    margin-top: 12px;
+}
+
+.hud {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255, 255, 255, 0.9);
+    color: #111;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-weight: 600;
+    z-index: 9;
+}
