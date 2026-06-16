@@ -1,15 +1,23 @@
 import * as THREE from 'three';
-import { Constants } from '../core/Constants';
+import {
+    ROAD_WIDTH,
+    SIDEWALK_WIDTH,
+    MAP_HALF_LENGTH,
+    LANE_DEFINITIONS,
+    PLAYER_SPEED,
+    PLAYER_START_SIDE,
+    PLAYER_GOAL_SIDE,
+} from '../constants/gameConfig';
 import Player from '../entities/Player';
 
 // Level01 constructs a simple Vietnamese street with two sidewalks and road lanes.
 export default class Level01 {
     public scene: THREE.Scene;
     public game: any;
-    public roadWidth: number;
-    public sidewalkWidth: number;
-    public mapHalfLength: number;
-    public lanePositions: number[];
+    public roadWidth = ROAD_WIDTH;
+    public sidewalkWidth = SIDEWALK_WIDTH;
+    public mapHalfLength = MAP_HALF_LENGTH;
+    public laneDefinitions = LANE_DEFINITIONS;
     public playerStartPos: THREE.Vector3;
     public playerGoalZ: number;
     public player?: Player;
@@ -18,14 +26,19 @@ export default class Level01 {
         this.scene = scene;
         this.game = game;
 
-        this.roadWidth = Constants.ROAD_WIDTH;
-        this.sidewalkWidth = Constants.SIDEWALK_WIDTH;
-        this.mapHalfLength = Constants.MAP_HALF_LENGTH;
+        this.roadWidth = ROAD_WIDTH;
+        this.sidewalkWidth = SIDEWALK_WIDTH;
+        this.mapHalfLength = MAP_HALF_LENGTH;
 
-        this.lanePositions = Constants.LANES;
+        this.laneDefinitions = LANE_DEFINITIONS;
 
-        this.playerStartPos = new THREE.Vector3(-this.mapHalfLength + 2, 0, -(this.roadWidth / 2 + this.sidewalkWidth / 2));
-        this.playerGoalZ = this.roadWidth / 2 + this.sidewalkWidth / 2;
+        const startZ = PLAYER_START_SIDE === 'bottom'
+            ? -this.roadWidth / 2 - this.sidewalkWidth / 2 + 1
+            : this.roadWidth / 2 + this.sidewalkWidth / 2 - 1;
+        this.playerStartPos = new THREE.Vector3(0, 0, startZ);
+        this.playerGoalZ = PLAYER_GOAL_SIDE === 'top'
+            ? this.roadWidth / 2 + this.sidewalkWidth / 2
+            : -this.roadWidth / 2 - this.sidewalkWidth / 2;
 
         this._setupScene();
     }
@@ -61,13 +74,23 @@ export default class Level01 {
         road.position.set(0, 0.05, 0);
         this.scene.add(road);
 
-        // Lane markings (simple rectangles)
-        this.lanePositions.forEach((zPos) => {
+        // Lane markings and the pedestrian-safe zone.
+        this.laneDefinitions.forEach((lane) => {
+            if (lane.role === 'pedestrian-safe-zone') {
+                const safeZone = new THREE.Mesh(
+                    new THREE.BoxGeometry(this.mapHalfLength * 2, 0.02, 1.2),
+                    new THREE.MeshStandardMaterial({ color: 0x999999 }),
+                );
+                safeZone.position.set(0, 0.06, lane.worldPosition);
+                this.scene.add(safeZone);
+                return;
+            }
+
             const mark = new THREE.Mesh(
                 new THREE.BoxGeometry(this.mapHalfLength * 2, 0.02, 0.2),
-                new THREE.MeshStandardMaterial({ color: 0xffff66 })
+                new THREE.MeshStandardMaterial({ color: 0xffff66 }),
             );
-            mark.position.set(0, 0.06, zPos);
+            mark.position.set(0, 0.06, lane.worldPosition);
             this.scene.add(mark);
         });
 
@@ -76,25 +99,22 @@ export default class Level01 {
     }
 
     spawnPlayer(): Player {
-        // Create a player at the start sidewalk location
+        if (this.player) {
+            this.player.reset(this.playerStartPos);
+            return this.player;
+        }
+
         this.player = new Player(this.playerStartPos);
         this.scene.add(this.player.mesh);
         return this.player;
     }
 
-    updatePlayer(player: Player, input: any, dt: number) {
-        // Compute movement vector based on input and speed constants
-        const dir = new THREE.Vector3();
-        if (input.isDown('left')) dir.x -= 1;
-        if (input.isDown('right')) dir.x += 1;
-        if (input.isDown('up')) dir.z -= 1;
-        if (input.isDown('down')) dir.z += 1;
-
-        if (dir.lengthSq() > 0) dir.normalize();
-
-        const speed = Constants.PLAYER_SPEED;
-        player.mesh.position.x += dir.x * speed * dt;
-        player.mesh.position.z += dir.z * speed * dt;
+    updatePlayer(player: Player, moveDirection: THREE.Vector3, dt: number) {
+        const direction = moveDirection.clone();
+        if (direction.lengthSq() > 0) {
+            direction.normalize();
+            player.mesh.position.add(direction.multiplyScalar(PLAYER_SPEED * dt));
+        }
 
         // Clamp player within map bounds
         const halfX = this.mapHalfLength - 1;
@@ -104,8 +124,8 @@ export default class Level01 {
         player.mesh.position.z = Math.max(minZ, Math.min(maxZ, player.mesh.position.z));
     }
 
-    getLaneWorldZ(index: number): number {
-        return this.lanePositions[index];
+    getLaneWorldZById(id: string): number | undefined {
+        return this.laneDefinitions.find((lane) => lane.id === id)?.worldPosition;
     }
 
     getSpawnXForDirection(direction: number): number {
@@ -118,7 +138,7 @@ export default class Level01 {
     }
 
     checkWin(player: Player): boolean {
-        // Win when player reaches the opposite sidewalk area (z greater than goal)
+        // Win when player reaches the opposite sidewalk area (top side)
         return player.mesh.position.z >= this.playerGoalZ + 0.5;
     }
 

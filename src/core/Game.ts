@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import Input from './Input';
-import { Constants } from './Constants';
 import Level01 from '../levels/Level01';
 import TrafficSystem from '../systems/TrafficSystem';
 import CollisionSystem from '../systems/CollisionSystem';
+import GameCamera from '../camera/GameCamera';
+import LookDirectionIndicator from '../entities/LookDirectionIndicator';
+import mapInputToWorldDirection from '../input/inputMapper';
 
 type EventMap = { [k: string]: ((...args: any[]) => void)[] };
 
@@ -17,6 +19,8 @@ export default class Game {
     public level: Level01;
     public traffic: TrafficSystem;
     public collision: CollisionSystem;
+    public gameCamera: GameCamera;
+    public lookIndicator: LookDirectionIndicator;
     public player: any;
     private running = false;
     private lastTime = 0;
@@ -29,11 +33,11 @@ export default class Game {
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x87ceeb);
 
-        this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
-        this.camera.position.set(0, Constants.CAMERA_HEIGHT, 0);
-        this.camera.rotation.x = -Constants.CAMERA_LOOK_DOWN;
+        this.gameCamera = new GameCamera();
+        this.camera = this.gameCamera.camera;
 
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
+        this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         mount.appendChild(this.renderer.domElement);
 
@@ -47,10 +51,12 @@ export default class Game {
         this.collision = new CollisionSystem(this.level);
 
         this.player = this.level.spawnPlayer();
+        this.lookIndicator = new LookDirectionIndicator();
+        this.scene.add(this.lookIndicator.mesh);
 
         // Lighting
         const light = new THREE.DirectionalLight(0xffffff, 0.8);
-        light.position.set(5, 10, 2);
+        light.position.set(5, 10, -5);
         this.scene.add(light);
         this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
@@ -83,14 +89,13 @@ export default class Game {
 
     reset() {
         this.level.reset();
-        this.player = this.level.spawnPlayer();
+        this.player = this.level.player as any;
         this.traffic.reset();
         this.collision.reset();
     }
 
     onResize() {
-        this.camera.aspect = window.innerWidth / window.innerHeight;
-        this.camera.updateProjectionMatrix();
+        this.gameCamera.onResize(window.innerWidth, window.innerHeight);
         this.renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
@@ -102,7 +107,9 @@ export default class Game {
         this.lastTime = time;
 
         // Player movement
-        this.level.updatePlayer(this.player, this.input, dt);
+        const moveDirection = mapInputToWorldDirection(this.input.getKeys());
+        this.level.updatePlayer(this.player, moveDirection, dt);
+        this.lookIndicator.update(this.player.mesh.position, moveDirection);
 
         // Update traffic system
         this.traffic.update(dt);
@@ -120,13 +127,8 @@ export default class Game {
             this.running = false;
         }
 
-        // Smooth camera follow
-        const target = new THREE.Vector3(this.player.mesh.position.x, 0, this.player.mesh.position.z);
-        const camTargetX = THREE.MathUtils.lerp(this.camera.position.x, target.x, Constants.CAMERA_FOLLOW_LERP);
-        const camTargetZ = THREE.MathUtils.lerp(this.camera.position.z, target.z + 6, Constants.CAMERA_FOLLOW_LERP);
-        this.camera.position.x = camTargetX;
-        this.camera.position.z = camTargetZ;
-        this.camera.lookAt(target.x, 0, target.z);
+        // Smooth camera follow with fixed offset for top-down visibility
+        this.gameCamera.update(this.player.mesh.position);
 
         this.renderer.render(this.scene, this.camera);
         requestAnimationFrame(this._update);

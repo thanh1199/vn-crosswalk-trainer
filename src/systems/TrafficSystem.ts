@@ -1,57 +1,79 @@
 import * as THREE from 'three';
 import Vehicle from '../entities/Vehicle';
-import { Constants } from '../core/Constants';
+import VehicleManager from './VehicleManager';
+import LaneSystem from './LaneSystem';
+import {
+    VEHICLE_BASE_SPEED,
+    VEHICLE_SPAWN_GAP,
+    LANE_DEFINITIONS,
+} from '../constants/gameConfig';
 import { randomRange } from '../utils/MathUtils';
 
 // TrafficSystem manages all vehicle spawning and movement.
 export default class TrafficSystem {
-    public vehicles: Vehicle[] = [];
+    private laneSystem: LaneSystem;
+    private vehicleManager: VehicleManager;
 
     constructor(public scene: THREE.Scene, public level: any) {
+        this.laneSystem = new LaneSystem(LANE_DEFINITIONS);
+        this.vehicleManager = new VehicleManager(this.scene, this.level, this.laneSystem);
         this._initVehicles();
         console.log('Vehicles spawned');
     }
 
+    public get vehicles(): Vehicle[] {
+        return this.vehicleManager.activeVehicles;
+    }
+
     private _initVehicles() {
-        // Spawn vehicles for each lane in both directions with spacing
-        const lanes = this.level.lanePositions;
-        lanes.forEach((laneZ: number, i: number) => {
-            // Alternate directions per lane
-            const direction = i % 2 === 0 ? 1 : -1;
-            // How many vehicles to seed across map
-            const count = Math.floor((this.level.mapHalfLength * 2) / Constants.VEHICLE_SPAWN_GAP);
+        const lanes = this.laneSystem.getDrivingLanes();
+        lanes.forEach((lane) => {
+            const count = Math.floor((this.level.mapHalfLength * 2) / VEHICLE_SPAWN_GAP);
             for (let k = 0; k < count; k++) {
-                const gap = Constants.VEHICLE_SPAWN_GAP;
+                const gap = VEHICLE_SPAWN_GAP;
                 const offset = k * gap * randomRange(0.8, 1.4);
-                const spawnX = this.level.getSpawnXForDirection(direction) + (direction > 0 ? offset : -offset);
-                const speed = Constants.VEHICLE_BASE_SPEED + i * 1.5 + randomRange(-1, 1);
-                const veh = new Vehicle({ position: { x: spawnX, z: laneZ }, speed, direction });
-                this.vehicles.push(veh);
-                this.scene.add(veh.mesh);
+                const spawnX = this.level.getSpawnXForDirection(lane.direction) + (lane.direction > 0 ? offset : -offset);
+                const speed = VEHICLE_BASE_SPEED + lane.laneNumber * 0.5 + randomRange(-1, 1);
+                const type = lane.direction > 0 ? 'car' : 'motorbike';
+                this.vehicleManager.spawnVehicle({
+                    position: { x: spawnX, z: lane.worldPosition },
+                    speed,
+                    direction: lane.direction,
+                    type,
+                    laneId: lane.id,
+                    preferredLaneId: this.laneSystem.getPreferredLaneId(lane.direction),
+                });
             }
         });
     }
 
     update(dt: number) {
-        const mapHalf = this.level.getMapBoundsX();
-        for (const v of this.vehicles) {
-            v.update(dt);
-            // Loop back when off-map
-            if (v.direction > 0 && v.mesh.position.x > mapHalf + 10) {
-                v.mesh.position.x = this.level.getSpawnXForDirection(1);
-            }
-            else if (v.direction < 0 && v.mesh.position.x < -mapHalf - 10) {
-                v.mesh.position.x = this.level.getSpawnXForDirection(-1);
-            }
-        }
+        this.vehicleManager.update(dt);
+
+        // Continuously spawn new vehicles to maintain traffic
+        this._respawnVehicles();
+    }
+
+    private _respawnVehicles() {
+        const lanes = this.laneSystem.getDrivingLanes();
+        lanes.forEach((lane) => {
+            const speed = VEHICLE_BASE_SPEED + lane.laneNumber * 0.5 + randomRange(-1, 1);
+            const type = lane.direction > 0 ? 'car' : 'motorbike';
+            const spawnX = this.level.getSpawnXForDirection(lane.direction);
+
+            this.vehicleManager.spawnVehicle({
+                position: { x: spawnX, z: lane.worldPosition },
+                speed,
+                direction: lane.direction,
+                type,
+                laneId: lane.id,
+                preferredLaneId: this.laneSystem.getPreferredLaneId(lane.direction),
+            });
+        });
     }
 
     reset() {
-        // remove and recreate vehicles
-        for (const v of this.vehicles) {
-            if (v.mesh.parent) v.mesh.parent.remove(v.mesh);
-        }
-        this.vehicles = [];
+        this.vehicleManager.reset();
         this._initVehicles();
     }
 }

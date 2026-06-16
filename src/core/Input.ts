@@ -38,6 +38,10 @@ export default class Input {
         }
     }
 
+    public getKeys(): Map<string, boolean> {
+        return this.keys;
+    }
+
     dispose() {
         window.removeEventListener('keydown', this._onKeyDown);
         window.removeEventListener('keyup', this._onKeyUp);
