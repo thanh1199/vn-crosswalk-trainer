@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { PLAYER_SIZE } from '../constants/gameConfig';
+import { PLAYER_HEIGHT } from '../constants/gameConfig';
 
 // Indicator arrow following the player and showing intended direction.
 export default class LookDirectionIndicator {
@@ -10,11 +10,11 @@ export default class LookDirectionIndicator {
         const material = new THREE.MeshStandardMaterial({ color: 0x00bfff });
         this.mesh = new THREE.Mesh(geometry, material);
         this.mesh.rotation.x = -Math.PI / 2;
-        this.mesh.position.set(0, PLAYER_SIZE * 0.75, 0);
+        this.mesh.position.set(0, PLAYER_HEIGHT * 0.75, 0);
     }
 
     public update(playerPosition: THREE.Vector3, moveDirection: THREE.Vector3) {
-        this.mesh.position.set(playerPosition.x, playerPosition.y + PLAYER_SIZE * 0.6, playerPosition.z);
+        this.mesh.position.set(playerPosition.x, playerPosition.y + PLAYER_HEIGHT * 0.6, playerPosition.z);
 
         if (moveDirection.lengthSq() > 0.001) {
             const normalized = moveDirection.clone().normalize();

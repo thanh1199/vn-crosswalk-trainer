@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { VEHICLE_SPEED_VARIANCE } from '../constants/gameConfig';
+import { TRAFFIC_FLOW_CONFIG, VEHICLE_SPEED_VARIANCE, VEHICLE_TYPE_CONFIG, VehicleType } from '../constants/gameConfig';
 import { randomRange } from '../utils/MathUtils';
 
-export type VehicleType = 'car' | 'motorbike';
 export type DrivingBehavior = 'calm' | 'aggressive';
+export type LaneChangeReason = 'overtake' | 'returnToPreferred' | 'futureAvoidPedestrian';
 
 export interface VehicleOptions {
     position?: { x: number; z: number };
@@ -13,17 +13,8 @@ export interface VehicleOptions {
     laneId?: string;
     preferredLaneId?: string;
     drivingBehavior?: DrivingBehavior;
+    laneChangeReason?: LaneChangeReason;
 }
-
-const VEHICLE_HEIGHT = 1.0;
-const CAR_WIDTH = 1.2;
-const CAR_LENGTH = 2.2;
-const MOTORBIKE_WIDTH = 0.7;
-const MOTORBIKE_LENGTH = 1.6;
-const VEHICLE_COLORS: Record<VehicleType, number> = {
-    car: 0xe74c3c,
-    motorbike: 0x2ecc71,
-};
 
 // Vehicle entity represented as a moving 3D box along the X axis.
 export default class Vehicle {
@@ -44,6 +35,18 @@ export default class Vehicle {
     public targetLaneZ?: number;
     public isChangingLane = false;
     public laneChangeCooldown = 0;
+    public laneChangeReason?: LaneChangeReason;
+    
+    // Speed recovery
+    public slowSpeedStartTime: number = 0;
+    public isAttemptingSpeedRecovery: boolean = false;
+
+    public get minNormalSpeed(): number {
+        return Math.max(
+            this.desiredSpeed * TRAFFIC_FLOW_CONFIG.minNormalSpeedRatio,
+            VEHICLE_TYPE_CONFIG[this.type].minNormalSpeed,
+        );
+    }
 
     public get currentSpeed(): number {
         return this.speed;
@@ -53,12 +56,12 @@ export default class Vehicle {
         this.speed = value;
     }
 
-    constructor({ position = { x: 0, z: 0 }, speed = 1, direction = 1, type = 'car', laneId, preferredLaneId, drivingBehavior }: VehicleOptions = {}) {
+    constructor({ position = { x: 0, z: 0 }, speed = 1, direction = 1, type = 'car', laneId, preferredLaneId, drivingBehavior, laneChangeReason }: VehicleOptions = {}) {
         this.type = type;
         this.laneId = laneId;
         this.preferredLaneId = preferredLaneId ?? laneId;
         this.width = this.getVehicleWidth();
-        this.height = VEHICLE_HEIGHT;
+        this.height = this.getVehicleHeight();
         this.length = this.getVehicleLength();
 
         const geometry = new THREE.BoxGeometry(this.length, this.height, this.width);
@@ -68,10 +71,12 @@ export default class Vehicle {
         this.mesh.position.set(position.x, this.height / 2, position.z);
         this.mesh.rotation.y = this.directionToRotation(direction);
 
-        this.desiredSpeed = speed + randomRange(-VEHICLE_SPEED_VARIANCE, VEHICLE_SPEED_VARIANCE);
+        const baseSpeed = speed + randomRange(-VEHICLE_SPEED_VARIANCE, VEHICLE_SPEED_VARIANCE);
+        this.desiredSpeed = this.clampDesiredSpeed(baseSpeed);
         this.speed = this.desiredSpeed;
         this.direction = direction; // 1 => positive X, -1 => negative X
         this.drivingBehavior = drivingBehavior ?? (Math.random() < 0.5 ? 'aggressive' : 'calm');
+        this.laneChangeReason = laneChangeReason;
     }
 
     private directionToRotation(direction: number): number {
@@ -102,23 +107,36 @@ export default class Vehicle {
     }
 
     public static getWidthForType(type: VehicleType): number {
-        return type === 'motorbike' ? MOTORBIKE_WIDTH : CAR_WIDTH;
+        return VEHICLE_TYPE_CONFIG[type].width;
     }
 
     public static getLengthForType(type: VehicleType): number {
-        return type === 'motorbike' ? MOTORBIKE_LENGTH : CAR_LENGTH;
+        return VEHICLE_TYPE_CONFIG[type].length;
+    }
+
+    public static getHeightForType(type: VehicleType): number {
+        return VEHICLE_TYPE_CONFIG[type].height;
     }
 
     public getVehicleWidth(): number {
-        return Vehicle.getWidthForType(this.type);
+        return VEHICLE_TYPE_CONFIG[this.type].width;
+    }
+
+    public getVehicleHeight(): number {
+        return VEHICLE_TYPE_CONFIG[this.type].height;
     }
 
     public getVehicleLength(): number {
-        return Vehicle.getLengthForType(this.type);
+        return VEHICLE_TYPE_CONFIG[this.type].length;
     }
 
     public getVehicleColor(): number {
-        return VEHICLE_COLORS[this.type];
+        return VEHICLE_TYPE_CONFIG[this.type].color;
+    }
+
+    private clampDesiredSpeed(speed: number): number {
+        const range = VEHICLE_TYPE_CONFIG[this.type].desiredSpeedRange;
+        return Math.min(Math.max(speed, range.min), range.max);
     }
 
     public dispose(): void {
